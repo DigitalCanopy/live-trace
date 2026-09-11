@@ -75,5 +75,9 @@ Le rôle d'Account qui administre les Applications, leurs clés d'API et les aut
 _Avoid_ : administrateur, superuser, owner
 
 **Viewer** :
-Le rôle d'Account qui consulte tout et change le statut des Issues, sans administrer.
+Le rôle d'Account qui consulte les Applications pour lesquelles il a un Access et change le statut de leurs Issues, sans administrer.
 _Avoid_ : user, lecteur, membre
+
+**Access** :
+Le droit d'un Account Viewer de consulter une Application donnée, accordé par un Admin. Un Admin accède à toutes les Applications sans Access.
+_Avoid_ : permission, droit, autorisation, accès
