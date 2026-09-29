@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Functional Analysis — Crash Reporting and Usage Tracking</title>
+<style>
+/* House style for InfraCables functional analysis PDFs.
+   Extracted 1:1 from functional-analysis-measurement-recovery.pdf
+   (itself authored in HTML/CSS and printed through Chromium — Skia/PDF).
+   Sizes are in pt (the original was authored in pt); print via headless Edge
+   with background graphics on (default in --print-to-pdf). */
+
+@page { size: A4; margin: 2cm 1.9cm; }
+
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body {
+  font-family: "Segoe UI", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #3B3B3B;
+  margin: 0;
+}
+
+/* ---- Title block (left-aligned, never centered) ---- */
+h1 {
+  font-size: 19pt;
+  line-height: 1.26;
+  font-weight: bold;
+  color: #17375E;
+  margin: 0 0 10px 0;
+}
+.doc-meta { font-size: 9.5pt; color: #6B6B6B; margin: 0 0 14px 0; }
+.doc-meta strong { color: #3B3B3B; }
+.doc-meta .sep { color: #B0B0B0; padding: 0 6px; }
+.title-rule { border: none; border-top: 2px solid #2E2E2E; margin: 0 0 22px 0; }
+
+/* ---- Headings (numbering is manual, in the text: "1. …", "3.2 …") ---- */
+h2 {
+  font-size: 13pt;
+  font-weight: bold;
+  color: #1F4E79;
+  border-bottom: 1px solid #D9D9D9;
+  padding-bottom: 5px;
+  margin: 19pt 0 7.5pt 0;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 11pt;
+  font-weight: bold;
+  color: #1F4E79;
+  margin: 15pt 0 6pt 0;
+  page-break-after: avoid;
+}
+
+/* ---- Body ---- */
+p { margin: 0 0 7.5pt 0; }
+strong { color: #222222; } /* bold emphasis is bold weight AND darker ink */
+em { font-style: italic; } /* reserved: captions, quoted messages, pending-validation notes */
+
+ul, ol { margin: 0 0 7.5pt 0; padding-left: 26px; }
+li { margin-bottom: 4px; }
+li ul, li ol { margin-top: 4px; margin-bottom: 0; }
+
+/* ---- Special-cases table ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  margin: 0 0 10pt 0;
+}
+col.case { width: 38%; }
+th, td {
+  border: 1px solid #D9D9D9;
+  padding: 6pt 9pt;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.54;
+}
+th { background: #F2F2F2; color: #222222; font-weight: bold; }
+td strong { color: #222222; } /* bold lead-in, then regular text in the same cell */
+tr { page-break-inside: avoid; }
+
+/* ---- Callout (quoted in-app message, e.g. a toast example) ---- */
+.callout {
+  background: #EAF2FA;
+  border-left: 4px solid #5B9BD5;
+  color: #34495E;
+  font-style: italic;
+  padding: 10px 14px;
+  margin: 0 0 7.5pt 0;
+}
+
+/* ---- Figures ---- */
+figure { margin: 12px 0 14px 0; text-align: center; page-break-inside: avoid; }
+figure svg { max-width: 100%; height: auto; }
+.figure-caption {
+  font-size: 9.5pt;
+  font-style: italic;
+  color: #767676;
+  text-align: center;
+  margin: 6px 0 0 0;
+}
+
+.page-break { page-break-before: always; }
+
+/* ---- Diagram style (inline SVG, draw.io-like) ----
+   Nodes: rounded rect rx=6, stroke-width 1, drop shadow (feDropShadow
+   dx=1 dy=1 stdDeviation=0.8, #8C8C8C at 50%). Labels centered,
+   Segoe UI 11px main line / 10px muted sub-lines.
+   Palette (fill / stroke / text, muted sub-label):
+     process (blue):   #DAE8FC / #6C8EBF / #1F3864, muted #41618C
+     success (green):  #D5E8D4 / #82B366 / #1E4620, muted #666666
+     decision (yellow rhombus): #FFF2CC / #D6B656 / #5C4A00
+     failure/deletion (red): #F8CECC / #B85450 / #6D1F1C, muted #A05A57
+     neutral (grey):   #F5F5F5 / #666666 / #333333
+     start (dark):     #1F4E79 / none    / #FFFFFF, muted #B9CCE4
+   Arrows: #666666, width 1.2, filled triangular marker.
+   Edge labels: Segoe UI italic 9.5px #767676 ("Yes"/"No" on decisions). */
+
+@media screen { body { max-width: 820px; margin: 40px auto; padding: 0 16px; background: #FFFFFF; } }
+
+</style>
+</head>
+<body>
+
+<h1>Functional Analysis — Crash Reporting and Usage Tracking</h1>
+
+<p class="doc-meta"><strong>Application:</strong> Live Trace<span class="sep">|</span><strong>Status:</strong> Proposal, pending business validation<span class="sep">|</span><strong>Date:</strong> 29/09/2026</p>
+<hr class="title-rule">
+
+<h2>1. Context and problem</h2>
+
+<p>The company runs several internal MAUI applications (Android tablets on 4G and Windows workstations, around a hundred users a day). When one of them crashes, the team learns about it only when a user complains, with no technical trace and no context: diagnosis relies on reproducing the problem blindly. Market tools (Sentry, Raygun, App Center) are excluded by an internal rule: this tool must not depend on an external project, even self-hosted.</p>
+
+<p><strong>Today, nobody knows how often an application crashes, on which version, because of which error, or which user was affected.</strong></p>
+
+<h2>2. Objective</h2>
+
+<p>Live Trace gives the team the guarantee that <strong>every crash of a tracked application is captured, kept and made visible</strong>, even when the device has no network at the time of the crash. Crashes are <strong>grouped by root cause</strong> so the team reads ten problems instead of a thousand reports, each problem carries <strong>enough context to be diagnosed without reproducing it</strong>, and the team knows <strong>which users were affected</strong> so they can contact them.</p>
+
+<h2>3. How it works</h2>
+
+<ul>
+  <li>A <strong>Live Trace module</strong> is built into each tracked Application. Once set up, it <strong>captures crashes automatically</strong>, with no extra code in each screen.</li>
+  <li>When a crash happens, the report is <strong>saved on the Device before the Application closes</strong>, then <strong>sent at the next launch</strong> as soon as the network allows. <strong>No crash is lost</strong> because of a network outage.</li>
+  <li>The Application can also report <strong>handled errors</strong> on purpose: errors the code catches but that should never happen.</li>
+  <li>Every report carries its <strong>context</strong>: Application version, Environment (development, test, production), operating system, device model, the connected User and free tags chosen by the Application (site, agency, mode).</li>
+  <li>The server <strong>groups reports that share the same cause into one Issue</strong>. The Issue is the unit the team reads, counts and follows.</li>
+  <li>An Issue is <strong>Open, Resolved or Ignored</strong>. A Resolved Issue that comes back in a later version is <strong>reopened automatically as a regression</strong>.</li>
+  <li>The team reads everything in a <strong>dashboard</strong>: overview, list of Issues, Issue detail, User page, Devices screen, administration. Each person signs in with their own Account and <strong>only sees the Applications they have been given Access to</strong>.</li>
+  <li>Delivery in two phases: <strong>Phase 1</strong> covers crash and error reporting (this whole document except 4.10); <strong>Phase 2</strong> adds <strong>usage tracking and Breadcrumbs</strong> (see 4.10).</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 650 650" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Journey of a crash, from the Device to the dashboard">
+<defs>
+<marker id="arrow1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker>
+<filter id="ds1" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="1" dy="1" stdDeviation="0.8" flood-color="#8C8C8C" flood-opacity="0.5"/></filter>
+<style>
+.t{font-family:"Segoe UI",sans-serif;font-size:11px;text-anchor:middle}
+.m{font-family:"Segoe UI",sans-serif;font-size:10px;text-anchor:middle}
+.e{font-family:"Segoe UI",sans-serif;font-size:9.5px;font-style:italic;fill:#767676}
+.a{fill:none;stroke:#666666;stroke-width:1.2}
+</style>
+</defs>
+
+<g class="a" marker-end="url(#arrow1)">
+<path d="M325,50 V78"/><path d="M325,128 V156"/><path d="M325,206 V220"/>
+<path d="M425,260 H463"/><path d="M550,240 V182 H467"/><path d="M325,298 V328"/>
+<path d="M325,370 V392"/><path d="M225,432 H170 V508"/><path d="M425,432 H480 V502"/>
+<path d="M170,550 V620 H203"/><path d="M480,552 V620 H447"/>
+</g>
+<g filter="url(#ds1)">
+<rect x="205" y="10" width="240" height="40" rx="6" fill="#1F4E79"/>
+<rect x="185" y="80" width="280" height="48" rx="6" fill="#DAE8FC" stroke="#6C8EBF"/>
+<rect x="185" y="158" width="280" height="48" rx="6" fill="#DAE8FC" stroke="#6C8EBF"/>
+<polygon points="325,222 425,260 325,298 225,260" fill="#FFF2CC" stroke="#D6B656"/>
+<rect x="465" y="240" width="170" height="40" rx="6" fill="#F5F5F5" stroke="#666666"/>
+<rect x="185" y="330" width="280" height="40" rx="6" fill="#DAE8FC" stroke="#6C8EBF"/>
+<polygon points="325,394 425,432 325,470 225,432" fill="#FFF2CC" stroke="#D6B656"/>
+<rect x="60" y="510" width="220" height="40" rx="6" fill="#D5E8D4" stroke="#82B366"/>
+<rect x="370" y="504" width="220" height="48" rx="6" fill="#DAE8FC" stroke="#6C8EBF"/>
+<rect x="205" y="600" width="240" height="40" rx="6" fill="#D5E8D4" stroke="#82B366"/>
+</g>
+<text class="t" x="325" y="34" fill="#FFFFFF">Crash in the Application</text>
+<text class="t" x="325" y="100" fill="#1F3864">Report saved on the Device</text>
+<text class="m" x="325" y="117" fill="#41618C">before the Application closes</text>
+<text class="t" x="325" y="178" fill="#1F3864">Sending attempt</text>
+<text class="m" x="325" y="195" fill="#41618C">at next launch, then periodically</text>
+<text class="t" x="325" y="264" fill="#5C4A00">Network available?</text>
+<text class="t" x="550" y="264" fill="#333333">Report kept on the Device</text>
+<text class="t" x="325" y="354" fill="#1F3864">Report received by Live Trace</text>
+<text class="t" x="325" y="429" fill="#5C4A00">Same cause</text>
+<text class="t" x="325" y="443" fill="#5C4A00">already known?</text>
+<text class="t" x="170" y="534" fill="#1E4620">New Issue created</text>
+<text class="t" x="480" y="524" fill="#1F3864">Occurrence added</text>
+<text class="t" x="480" y="540" fill="#1F3864">to the existing Issue</text>
+<text class="t" x="325" y="624" fill="#1E4620">Issue visible in the dashboard</text>
+<text class="e" x="438" y="253">No</text>
+<text class="e" x="556" y="214">new attempt later</text>
+<text class="e" x="333" y="318">Yes</text>
+<text class="e" x="190" y="425">No</text>
+<text class="e" x="440" y="425">Yes</text>
+</svg>
+
+<p class="figure-caption">Figure 1 — Journey of a crash, from the Device to the dashboard</p>
+</figure>
+
+<h2>4. Detailed behaviour</h2>
+
+<h3>4.1 Setting up an Application</h3>
+
+<ol>
+  <li>The Application's developer adds the Live Trace module to the Application.</li>
+  <li>At startup, the Application gives the module its <strong>access key</strong>, the server address and its <strong>Environment</strong>. Capture starts immediately.</li>
+  <li>After login, the Application <strong>declares the User</strong>: directory identifier, e-mail and business role. At logout, it <strong>clears the User</strong>.</li>
+  <li>The Application may set <strong>free tags</strong> (e.g. site, agency, offline mode) that accompany every following report.</li>
+  <li>The Application may <strong>report a handled error</strong> on purpose, with optional tags.</li>
+</ol>
+
+<ul>
+  <li>The Application version and build number are <strong>captured automatically</strong>, never typed by hand.</li>
+  <li>The module <strong>never has a visible effect on the Application</strong>: no slowdown at startup, no blocking of the screen, and an internal failure of the module (full disk, unreachable server, corrupted file) is <strong>silently absorbed, never turned into a crash of the Application</strong>.</li>
+  <li>A <strong>sample Application</strong> with buttons that trigger each kind of crash and error is delivered with Live Trace, so the module can be checked without touching a real Application.</li>
+</ul>
+
+<h3>4.2 Capture on the Device</h3>
+
+<ul>
+  <li>Captured automatically as a <strong>Crash</strong>: any unhandled error that terminates the Application, including errors raised by background tasks nobody waited for, on <strong>Android and Windows</strong>.</li>
+  <li>Reported on purpose as an <strong>Error</strong>: a handled error sent by the Application's code (see 4.1). Crashes and Errors follow the same path and are <strong>told apart everywhere in the dashboard</strong>.</li>
+  <li>The Crash report is <strong>written on the Device at the moment of the crash, before anything else</strong>, with <strong>no network attempt</strong> at that moment. It survives the Application being killed and the Device being restarted.</li>
+  <li>Each report contains the <strong>full technical trace</strong> (stack trace, including the chain of underlying errors), both as raw text and in a structured form where the lines that belong to the <strong>Application's own code</strong> are distinguished from the framework's.</li>
+  <li>Each report contains the <strong>Device context</strong>: operating system and version, device model, Application version and build, Environment, language, free memory, battery, network type, orientation, local and universal time.</li>
+</ul>
+
+<h3>4.3 Sending to the server</h3>
+
+<ul>
+  <li>Pending reports are <strong>sent at launch, then periodically</strong>, in the background, <strong>grouped</strong> to limit network use on 4G tablets.</li>
+  <li>If the network or the server is unavailable, the sending is <strong>retried later with a growing delay</strong>. <strong>Nothing is deleted from the Device until the server has confirmed reception.</strong></li>
+  <li>If the server <strong>definitively refuses</strong> a sending (unknown or revoked key, report too large, sending rate exceeded), it is <strong>abandoned and not retried forever</strong> (see 5).</li>
+  <li>The waiting area on the Device is <strong>capped at 500 items or 5 MB</strong> so Live Trace never fills the Device's storage. When the cap is reached, the <strong>oldest Errors and Session records are removed first; Crash reports are never removed</strong> to make room. <em>(New rule introduced by this feature, submitted for business validation.)</em></li>
+  <li><strong>Crash-loop protection</strong>: when the same error is reported <strong>more than five times within ten minutes</strong>, the module stops sending full reports for it and <strong>only sends a count of occurrences</strong> until the ten minutes are over. An Application crashing in a loop at startup therefore <strong>neither drains the battery nor the mobile data plan</strong>. Other errors are not affected.</li>
+  <li>Every report carries a <strong>unique identifier created on the Device</strong>: a report received twice (sent again after a network timeout) is <strong>counted only once</strong>.</li>
+</ul>
+
+<h3>4.4 Reception and grouping into Issues</h3>
+
+<ol>
+  <li>The server checks the <strong>access key</strong> of the Application. A report without a valid key is refused.</li>
+  <li>The report is stored as an <strong>Occurrence</strong>, <strong>dated at the moment of the crash</strong>, not the moment it arrived: a crash from yesterday sent this morning appears on yesterday's date.</li>
+  <li>The Occurrence joins the <strong>Issue that shares its signature</strong>: the <strong>type of error</strong> and the <strong>first line of the trace that belongs to the Application's code</strong>. The <strong>error message is ignored</strong>, so variable values in the message never create duplicate Issues.</li>
+  <li>If no Issue has this signature yet, a <strong>new Issue is created</strong>, with status Open.</li>
+</ol>
+
+<ul>
+  <li>When the trace contains no line of the Application's code, the Occurrence is grouped on the <strong>type of error and the topmost line of the trace</strong>, so <strong>no Occurrence is ever left without an Issue</strong>.</li>
+  <li>Issues are <strong>separated by Application and by Environment</strong>: the same problem in test and in production gives two Issues.</li>
+  <li>A report the server cannot read, but sent with a valid key, is <strong>kept aside in quarantine</strong> with the reason, rather than lost: the team can find out why it was unreadable.</li>
+</ul>
+
+<h3>4.5 Issue life cycle and regressions</h3>
+
+<ul>
+  <li>A Viewer or an Admin can mark an Issue <strong>Resolved</strong> or <strong>Ignored</strong>, and <strong>reopen</strong> it manually at any time.</li>
+  <li>A <strong>Resolved</strong> Issue that receives an Occurrence from a <strong>strictly later Version</strong> than its resolution Version is <strong>reopened automatically</strong>, flagged as a <strong>regression</strong>, with the Version where it came back.</li>
+  <li>An Occurrence from the <strong>same or an earlier Version</strong> does <strong>not reopen</strong> a Resolved Issue: it comes from an older installation still in use.</li>
+  <li>An <strong>Ignored</strong> Issue <strong>stays Ignored</strong> whatever happens: accepted noise never comes back. Its Occurrences are still recorded.</li>
+  <li>Versions are compared in their <strong>natural order</strong> (2.10 comes after 2.9), the build number breaking ties.</li>
+  <li>The <strong>resolution Version</strong> is the <strong>latest Version in which the Issue had been seen when it was marked Resolved</strong>. <em>Pending business decision.</em> (Alternative: the Viewer enters the Version that contains the fix.)</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 650 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Life cycle of an Issue">
+<defs>
+<marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker>
+<filter id="ds2" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="1" dy="1" stdDeviation="0.8" flood-color="#8C8C8C" flood-opacity="0.5"/></filter>
+<style>
+.t{font-family:"Segoe UI",sans-serif;font-size:11px;text-anchor:middle}
+.m{font-family:"Segoe UI",sans-serif;font-size:10px;text-anchor:middle}
+.e{font-family:"Segoe UI",sans-serif;font-size:9.5px;font-style:italic;fill:#767676}
+.a{fill:none;stroke:#666666;stroke-width:1.2}
+</style>
+</defs>
+
+<g class="a" marker-end="url(#arrow2)">
+<path d="M325,50 V88"/><path d="M300,130 V168 H135 V208"/><path d="M350,130 V168 H515 V208"/>
+<path d="M135,250 V278"/><path d="M245,325 H298"/><path d="M135,370 V408"/><path d="M560,250 V408"/>
+</g>
+<g filter="url(#ds2)">
+<rect x="210" y="10" width="230" height="40" rx="6" fill="#1F4E79"/>
+<rect x="250" y="90" width="150" height="40" rx="6" fill="#DAE8FC" stroke="#6C8EBF"/>
+<rect x="60" y="210" width="150" height="40" rx="6" fill="#D5E8D4" stroke="#82B366"/>
+<rect x="440" y="210" width="150" height="40" rx="6" fill="#F5F5F5" stroke="#666666"/>
+<polygon points="135,280 245,325 135,370 25,325" fill="#FFF2CC" stroke="#D6B656"/>
+<rect x="300" y="301" width="190" height="48" rx="6" fill="#F8CECC" stroke="#B85450"/>
+<rect x="35" y="410" width="200" height="48" rx="6" fill="#F5F5F5" stroke="#666666"/>
+<rect x="472" y="410" width="176" height="48" rx="6" fill="#F5F5F5" stroke="#666666"/>
+</g>
+<text class="t" x="325" y="34" fill="#FFFFFF">First Occurrence received</text>
+<text class="t" x="325" y="114" fill="#1F3864">Open</text>
+<text class="t" x="135" y="234" fill="#1E4620">Resolved</text>
+<text class="t" x="515" y="234" fill="#333333">Ignored</text>
+<text class="t" x="135" y="322" fill="#5C4A00">Occurrence from</text>
+<text class="t" x="135" y="336" fill="#5C4A00">a later Version?</text>
+<text class="t" x="395" y="321" fill="#6D1F1C">Back to Open,</text>
+<text class="m" x="395" y="338" fill="#A05A57">flagged as regression</text>
+<text class="t" x="135" y="430" fill="#333333">Stays Resolved</text>
+<text class="m" x="135" y="447" fill="#666666">older installation still in use</text>
+<text class="t" x="560" y="430" fill="#333333">Stays Ignored,</text>
+<text class="m" x="560" y="447" fill="#666666">Occurrence still recorded</text>
+<text class="e" x="218" y="162" text-anchor="middle">marked resolved</text>
+<text class="e" x="432" y="162" text-anchor="middle">marked ignored</text>
+<text class="e" x="266" y="318">Yes</text>
+<text class="e" x="143" y="393">No</text>
+<text class="e" x="567" y="300">new Occurrence</text>
+</svg>
+
+<p class="figure-caption">Figure 2 — Life cycle of an Issue</p>
+</figure>
+
+<h3>4.6 Users, Devices and Sessions</h3>
+
+<ul>
+  <li>A <strong>Device</strong> is one installation of the Application; Live Trace gives it its own identifier.</li>
+  <li>A <strong>User</strong> is recognised by their <strong>directory identifier</strong>: the same person on two Devices counts as <strong>one User</strong>, with two Devices on their page.</li>
+  <li>An Occurrence that happens <strong>before login</strong> is attached to the Device only, then <strong>attached to the User as soon as they log in during the same Session</strong>. After logout, following Occurrences are <strong>no longer attributed</strong> to that User.</li>
+  <li>A <strong>Session</strong> starts when the Application is opened, or when it comes back to the foreground <strong>after more than two minutes</strong> in the background; it ends when the Application goes to the background. A Crash marks the current Session as <strong>crashed</strong>.</li>
+  <li>These Sessions feed two health indicators: the <strong>crash-free Sessions rate</strong> and the <strong>crash-free Users rate</strong>.</li>
+</ul>
+
+<h3>4.7 Dashboard screens</h3>
+
+<p>The dashboard always works on <strong>one Application at a time</strong> and an <strong>Environment filter</strong> applies to every screen. The current selection is kept in the page address, so a view can be shared by copying its link.</p>
+
+<ul>
+  <li><strong>Overview</strong>: over a chosen period, Occurrences per day, number of Users affected by crashes, crash-free Sessions and Users rates, most frequent Issues, and breakdown of Occurrences by Version.</li>
+  <li><strong>Issues list</strong>: for each Issue, type of error, place in the code, number of Occurrences, number of Users affected, first and last seen, Versions affected, status (regression included) and Crash/Error distinction. <strong>Filters</strong>: status, Version, Environment, period, tag, device model, operating system and its version. <strong>Sorting</strong>: frequency, recency, Users affected.</li>
+  <li><strong>Issue detail</strong>: structured trace with the Application's own lines highlighted and underlying errors expandable (raw text available as fallback), curve of the Issue's Occurrences over time, Versions, operating systems and device models affected, <strong>list of affected Users with their e-mail</strong> so they can be contacted, and every individual Occurrence with its full context, User and tags.</li>
+  <li><strong>User page</strong>: search by e-mail or identifier; business role, Version in use, Devices, latest Sessions and all Occurrences — to understand what happened to a User who calls.</li>
+  <li><strong>Devices</strong>: every combination of operating system, version and device model met over the period, with Sessions, Occurrences, Users affected and crash-free Sessions rate, to spot an environment that crashes more than the others.</li>
+  <li><strong>Navigation</strong>: every Version, operating system and device model shown in the overview, an Issue detail or the Devices screen <strong>opens the Issues list already filtered</strong> on it.</li>
+</ul>
+
+<h3>4.8 Accounts, roles and Access</h3>
+
+<ul>
+  <li>Every page of the dashboard <strong>requires signing in</strong> with an e-mail and password. An Account can sign out and change its password.</li>
+  <li>Two roles: <strong>Admin</strong> administers Applications, keys and Accounts and sees <strong>every Application</strong>; <strong>Viewer</strong> reads and changes the status of Issues, <strong>only on the Applications they have been given Access to</strong>.</li>
+  <li>For a Viewer, an Application without Access <strong>does not exist</strong>: it appears in no list, no search, no screen, and is refused <strong>even through a hand-crafted request</strong>. A Viewer with no Access sees an empty dashboard.</li>
+  <li>On the very first start, an <strong>initial Admin</strong> is created from the installation settings, so nobody is ever locked out.</li>
+</ul>
+
+<h3>4.9 Administration</h3>
+
+<ul>
+  <li>An Admin <strong>creates, renames and archives</strong> Applications.</li>
+  <li>An Admin creates <strong>several access keys per Application</strong>, revokes one, and sees the <strong>date each key was last used</strong>. Two active keys work at the same time, which allows a <strong>key rotation without interruption</strong>. A revoked key is <strong>refused immediately</strong>.</li>
+  <li>Keys are <strong>visible in clear at any time</strong> in the administration screen, to copy them into an Application when needed.</li>
+  <li>An Admin sets, per Application, the <strong>maximum sending rate</strong> and the <strong>maximum report size</strong>. Default values are set at creation; a change <strong>takes effect without restarting</strong> the server.</li>
+  <li>An Admin <strong>creates Accounts</strong> (e-mail, initial password, role), <strong>deactivates</strong> them, and <strong>grants or withdraws Access</strong> of each Viewer to each Application. A change of Access is <strong>visible immediately</strong>.</li>
+  <li>An <strong>archived Application</strong> refuses any new report and keeps its history readable. <em>Pending business decision.</em></li>
+</ul>
+
+<h3>4.10 Usage tracking and Breadcrumbs (Phase 2)</h3>
+
+<ul>
+  <li>The Application can report <strong>Events</strong>: named user actions (a button pressed, a feature used).</li>
+  <li>The module records <strong>Screen views</strong>: each page displayed by the Application. <em>Pending business decision:</em> recorded automatically or declared by the Application.</li>
+  <li>Every Occurrence carries its <strong>Breadcrumbs</strong>: the <strong>Events and Screen views of the same Session that preceded it</strong>, shown in the Occurrence detail, so the team sees <strong>what the User was doing just before the crash</strong>. The number of Breadcrumbs kept is <strong>bounded</strong> (suggested: the last 50 to 100) so memory use stays negligible.</li>
+  <li><strong>Usage screens</strong> in the dashboard show how the Applications are used (most used screens and features, by Version and by business role). <em>Pending business decision:</em> exact content of the usage screens, to be specified before Phase 2.</li>
+  <li>Events and Screen views follow the <strong>same sending path</strong> as Errors (see 4.3): saved on the Device, sent in groups, never blocking the Application.</li>
+</ul>
+
+<h3>4.11 Personal data</h3>
+
+<ul>
+  <li>Live Trace stores, for each User, their <strong>directory identifier, e-mail and business role</strong>, visible to every Account with Access to the Application.</li>
+  <li><strong>Retention period</strong>: Occurrences are deleted after <strong>90 days</strong>; Issues and their counters are kept. <em>Pending business decision.</em> The period must be <strong>documented as the retention period</strong> of the processing.</li>
+  <li>The Users of the tracked Applications are <strong>informed</strong> that crashes are collected with their identity (internal note or mention in the Application), and the processing is <strong>recorded in the company's processing register</strong>. <em>Pending business decision.</em></li>
+</ul>
+
+<h2>5. Special cases</h2>
+
+<table>
+<colgroup><col class="case"><col></colgroup>
+<tr><th>Case</th><th>Behaviour</th></tr>
+<tr><td><strong>Crash with no network</strong></td><td>Report kept on the Device, sent at a later launch when the network is back. <strong>No loss.</strong></td></tr>
+<tr><td><strong>Application crashing in a loop at startup</strong></td><td>Beyond five identical reports in ten minutes, only a <strong>count of occurrences</strong> is sent (see 4.3).</td></tr>
+<tr><td><strong>Crash before login</strong></td><td>Attached to the Device, then to the User <strong>if they log in during the same Session</strong>.</td></tr>
+<tr><td><strong>User logs out</strong></td><td>Following Occurrences are <strong>no longer attributed</strong> to them.</td></tr>
+<tr><td><strong>Same User on two Devices</strong></td><td><strong>One User</strong>, two Devices on their page.</td></tr>
+<tr><td><strong>Report sent days after the crash</strong></td><td>Accepted and <strong>placed at the date of the crash</strong>.</td></tr>
+<tr><td><strong>Same report received twice</strong> (retry after a timeout)</td><td><strong>Counted once</strong>; the Device is told it was received.</td></tr>
+<tr><td><strong>Server unavailable</strong></td><td>Reports kept on the Device and <strong>retried with a growing delay</strong>.</td></tr>
+<tr><td><strong>Waiting area on the Device full</strong></td><td>Oldest Errors and Session records removed first; <strong>Crash reports never removed</strong> (see 4.3).</td></tr>
+<tr><td><strong>Report too large, or sending rate exceeded</strong></td><td><strong>Refused</strong> by the server, <strong>abandoned</strong> by the Device without endless retries.</td></tr>
+<tr><td><strong>Report the server cannot read</strong></td><td><strong>Kept in quarantine</strong> with the reason; refused for the Device.</td></tr>
+<tr><td><strong>Unknown or revoked key</strong></td><td>Report <strong>refused</strong>.</td></tr>
+<tr><td><strong>Two active keys on one Application</strong></td><td><strong>Both accepted</strong> — rotation without interruption.</td></tr>
+<tr><td><strong>Archived Application</strong></td><td>New reports refused, <strong>history still readable</strong>. <em>Pending business decision.</em></td></tr>
+<tr><td><strong>Same error with different messages</strong></td><td><strong>Same Issue</strong>: the message is ignored.</td></tr>
+<tr><td><strong>No line of the Application's code in the trace</strong></td><td>Grouped on the <strong>topmost line of the trace</strong>.</td></tr>
+<tr><td><strong>Same problem in test and in production</strong></td><td><strong>Two Issues</strong>, one per Environment.</td></tr>
+<tr><td><strong>Resolved Issue seen again in a later Version</strong></td><td><strong>Reopened as a regression</strong>, with the Version where it came back.</td></tr>
+<tr><td><strong>Resolved Issue seen again in the same or an earlier Version</strong></td><td><strong>Stays Resolved</strong>: an older installation is still in use.</td></tr>
+<tr><td><strong>Ignored Issue seen again</strong></td><td><strong>Stays Ignored</strong>; the Occurrence is still recorded.</td></tr>
+<tr><td><strong>Application in background for less than two minutes</strong></td><td><strong>Same Session</strong> continues.</td></tr>
+<tr><td><strong>Application killed by the system</strong> (end of Session never received)</td><td>Session counted as <strong>ended without crash</strong>, unless a Crash is attached to it; a late end record updates it.</td></tr>
+<tr><td><strong>Device combination with Sessions but no Occurrence</strong></td><td>Shown with a <strong>100 % crash-free rate</strong>.</td></tr>
+<tr><td><strong>Viewer without Access to an Application</strong></td><td>The Application <strong>does not exist</strong> for them, even through a hand-crafted request.</td></tr>
+<tr><td><strong>Deactivated Account</strong></td><td><strong>Can no longer sign in.</strong></td></tr>
+<tr><td><strong>Internal failure of the Live Trace module</strong></td><td><strong>Silently absorbed</strong>: never slows down nor crashes the Application.</td></tr>
+</table>
+
+<h2>6. What is not covered (accepted limitations)</h2>
+
+<ul>
+  <li><strong>Alerts</strong> (e-mail, Teams) are not part of Phases 1 and 2: the team has to <strong>open the dashboard</strong> to discover a new Issue or a regression. Planned for a later phase.</li>
+  <li><strong>Crashes outside the application layer</strong> (system-level crashes, out-of-memory kills by the operating system) are not captured; they are rare in these Applications.</li>
+  <li><strong>iOS and macOS</strong> are not supported; only <strong>Android and Windows</strong>.</li>
+  <li><strong>Performance monitoring</strong> (slowness, response times) is not covered.</li>
+  <li><strong>Obfuscated or pre-compiled builds</strong> are not supported: the Applications are not obfuscated today; the grouping would have to be revisited if that changes.</li>
+  <li>A report <strong>refused for its size or for exceeding the sending rate is lost</strong>: this protects the server from a runaway Application.</li>
+  <li><strong>Manual merging of Issues</strong> and <strong>alerts on sudden spikes</strong> are not provided.</li>
+  <li>Accounts use <strong>their own e-mail and password</strong>: no company single sign-on, no self-registration.</li>
+  <li>Access keys stay <strong>readable in the administration screen</strong>: to be reassessed with the security team in a later phase.</li>
+  <li>The <strong>production hosting target</strong> and its deployment are outside this analysis.</li>
+</ul>
+
+<h2>7. Expected benefits</h2>
+
+<ul>
+  <li><strong>No crash goes unnoticed</strong>: every crash of Android and Windows Applications is kept on the Device and reaches the dashboard, even after a day offline — target: at least 95 % of crashes reported by users already present in Live Trace.</li>
+  <li><strong>Diagnosis without reproduction</strong>: the structured trace, the Device context, the User and (Phase 2) the Breadcrumbs are enough to locate the cause — target: 80 % of crashes fixed without reproducing them.</li>
+  <li><strong>Priorities driven by real impact</strong>: grouped Issues, affected Users, crash-free rates and regressions per Version show where to start and whether the last release made things better or worse.</li>
+</ul>
+
+</body>
+</html>
